@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Novel2Script - 小说转剧本工具（可追问打磨）</title>
+    <title>Novel2Script - 三栏布局：导入 | 剧本 | 历史追问</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -27,13 +27,13 @@
             border-left: 4px solid #3498db;
             padding-left: 12px;
         }
-        .main-container {
+        .three-columns {
             display: flex;
             flex: 1;
             gap: 20px;
             min-height: 0;
         }
-        .left-panel, .right-panel {
+        .col {
             background: white;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
@@ -42,8 +42,10 @@
             padding: 20px;
             overflow: auto;
         }
-        .left-panel { flex: 1; }
-        .right-panel { flex: 1; }
+        .col-left { flex: 1.2; }
+        .col-mid { flex: 1.5; }
+        .col-right { flex: 1; }
+        
         .panel-title {
             font-weight: 600;
             margin-bottom: 12px;
@@ -51,6 +53,9 @@
             color: #2c3e50;
             border-bottom: 2px solid #e2e8f0;
             padding-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         textarea {
             width: 100%;
@@ -70,9 +75,7 @@
             flex-wrap: wrap;
             gap: 10px;
         }
-        .file-upload input[type="file"] {
-            flex: 1;
-        }
+        .file-upload input[type="file"] { flex: 1; }
         .mode-check {
             display: flex;
             align-items: center;
@@ -102,6 +105,7 @@
         .ask-btn:hover { background: #6c3483; }
         .apply-btn { background: #27ae60; }
         .apply-btn:hover { background: #1e8449; }
+        .clear-history-btn { background: #e74c3c; padding: 4px 12px; font-size: 12px; }
         .error {
             color: #e74c3c;
             background: #fef3f2;
@@ -171,59 +175,92 @@
             white-space: pre-wrap;
             display: none;
         }
-        .answer-box pre {
-            margin: 0;
-            white-space: pre-wrap;
-            font-family: monospace;
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 8px;
+            margin-top: 8px;
         }
+        .history-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background: white;
+        }
+        .history-header {
+            padding: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f1f5f9;
+            border-radius: 8px 8px 0 0;
+        }
+        .history-header:hover { background: #e2e8f0; }
+        .history-info { flex: 1; }
+        .history-actions button { margin-left: 4px; padding: 2px 8px; font-size: 11px; }
+        .history-conversations {
+            padding: 8px;
+            border-top: 1px solid #e2e8f0;
+            background: #fefce8;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+        .conv-item {
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #cbd5e1;
+        }
+        .conv-question { font-weight: bold; color: #8e44ad; }
+        .conv-answer { margin-top: 4px; color: #2c3e50; }
+        .conv-yaml { font-family: monospace; background: #1e293b; color: #e2e8f0; padding: 4px; margin-top: 4px; font-size: 11px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
-    <h1>📖 Novel2Script · AI 小说转剧本工具（可追问打磨）</h1>
-    <div class="sub">基于智谱 GLM-4.5-Air，将小说（≥3章）转换为结构化 YAML 剧本 | 可追问打磨剧本</div>
+    <h1>📖 Novel2Script · AI 小说转剧本工具</h1>
+    <div class="sub">基于智谱 GLM-4.5-Air，将小说（≥3章）转换为结构化 YAML 剧本 | 支持追问打磨，历史记录含问答</div>
 
-    <div class="main-container">
-        <!-- 左侧：导入区 -->
-        <div class="left-panel">
+    <div class="three-columns">
+        <!-- 左栏：导入区 -->
+        <div class="col col-left">
             <div class="panel-title">📂 1. 导入小说</div>
             <textarea id="inputText" placeholder="请在此粘贴至少包含3章的小说内容（支持第X章格式）..."></textarea>
             
             <div class="file-upload">
                 <input type="file" id="fileInput" multiple accept=".txt,.md,.docx">
-                <button id="loadFileBtn">📄 加载文件内容（多文件按序拼接）</button>
+                <button id="loadFileBtn">📄 加载文件</button>
                 <label class="mode-check">
-                    <input type="checkbox" id="appendMode"> 📎 追加到当前内容后
+                    <input type="checkbox" id="appendMode"> 📎 追加到当前内容
                 </label>
-                <button id="clearTextBtn" class="clear-btn">🗑️ 清空文本框</button>
+                <button id="clearTextBtn" class="clear-btn">🗑️ 清空</button>
             </div>
 
             <div class="action-bar">
-                <div>
-                    <button id="convertBtn">✨ 转换为剧本 YAML</button>
-                    <span id="loadingMsg" class="loading"></span>
-                </div>
+                <button id="convertBtn">✨ 转换为剧本 YAML</button>
+                <span id="loadingMsg" class="loading"></span>
             </div>
             <div id="errorMsg" class="error" style="display:none;"></div>
             <div class="info">
                 <strong>💡 要求</strong><br>
-                • 至少包含3个章节（如“第一章、第二章、第三章”）<br>
-                • 输出格式符合预定义剧本Schema（无emotion字段）<br>
-                • 转换耗时约10-20秒，请耐心等待<br>
-                • 支持 .txt, .md, .docx 格式，可多选文件（按顺序加载）<br>
-                • <strong>右侧可追问打磨：</strong>生成YAML后，输入问题或修改指令，AI会回答并可能给出修改后的YAML，一键应用。
+                • 至少3个章节<br>
+                • 输出无emotion字段的YAML<br>
+                • 支持 .txt, .md, .docx 多文件<br>
+                • 右侧可追问打磨，历史记录自动保存问答
             </div>
         </div>
 
-        <!-- 右侧：输出区 + 可追问打磨区 -->
-        <div class="right-panel">
+        <!-- 中栏：输出 + 追问打磨 -->
+        <div class="col col-mid">
             <div class="panel-title">🎬 2. 剧本输出 (YAML)</div>
             <div id="yamlOutput" class="yaml-output">等待转换...</div>
             <div class="action-bar">
-                <button id="exportBtn" class="export-btn" disabled>💾 导出 YAML 文件</button>
+                <button id="exportBtn" class="export-btn" disabled>💾 导出 YAML</button>
                 <button id="copyBtn">📋 复制到剪贴板</button>
             </div>
 
-            <!-- 可追问打磨区域 -->
             <div class="ask-container">
                 <div class="panel-title">💬 3. 可追问打磨</div>
                 <div class="ask-input-group">
@@ -231,6 +268,17 @@
                     <button id="askBtn" class="ask-btn">🤔 提问 / 修改</button>
                 </div>
                 <div id="answerBox" class="answer-box"></div>
+            </div>
+        </div>
+
+        <!-- 右栏：历史记录（含问答） -->
+        <div class="col col-right">
+            <div class="panel-title">
+                <span>🕒 历史记录（含问答）</span>
+                <button id="clearHistoryBtn" class="clear-history-btn">清空历史</button>
+            </div>
+            <div id="historyList" class="history-list">
+                <div style="color: #888; text-align: center;">暂无历史记录</div>
             </div>
         </div>
     </div>
@@ -248,13 +296,159 @@
         const copyBtn = document.getElementById('copyBtn');
         const loadingMsg = document.getElementById('loadingMsg');
         const errorMsgDiv = document.getElementById('errorMsg');
-        // 可追问元素
         const askInput = document.getElementById('askInput');
         const askBtn = document.getElementById('askBtn');
         const answerBox = document.getElementById('answerBox');
+        const historyListDiv = document.getElementById('historyList');
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn');
         
-        let currentYamlString = '';   // 当前右侧显示的YAML字符串
-        let pendingNewYaml = null;     // 从追问得到的待应用YAML
+        let currentYamlString = '';
+        let currentHistoryId = null;
+        let pendingNewYaml = null;
+
+        // ========== 历史记录管理（含问答）==========
+        const STORAGE_KEY = 'Novel2Script_history_with_qa';
+        const MAX_HISTORY = 10;
+
+        function saveConversionHistory(inputSummary, yamlStr) {
+            const record = {
+                id: Date.now(),
+                timestamp: new Date().toLocaleString(),
+                summary: inputSummary.substring(0, 80),
+                yaml: yamlStr,
+                conversations: []
+            };
+            let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            history.unshift(record);
+            if (history.length > MAX_HISTORY) history.pop();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+            currentHistoryId = record.id;
+            renderHistory();
+            return record.id;
+        }
+
+        function addConversationToCurrent(question, answer, newYaml = null) {
+            if (!currentHistoryId) return;
+            let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const recordIndex = history.findIndex(r => r.id === currentHistoryId);
+            if (recordIndex === -1) return;
+            history[recordIndex].conversations.push({
+                timestamp: new Date().toLocaleString(),
+                question: question,
+                answer: answer,
+                newYaml: newYaml
+            });
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+            renderHistory();
+        }
+
+        function updateHistoryYaml(historyId, newYaml) {
+            let history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const record = history.find(r => r.id === historyId);
+            if (record) {
+                record.yaml = newYaml;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+                renderHistory();
+            }
+        }
+
+        function renderHistory() {
+            const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            if (history.length === 0) {
+                historyListDiv.innerHTML = '<div style="color: #888; text-align: center;">暂无历史记录</div>';
+                return;
+            }
+            let html = '';
+            for (const record of history) {
+                const convCount = record.conversations.length;
+                html += `
+                    <div class="history-item" data-id="${record.id}">
+                        <div class="history-header">
+                            <div class="history-info">
+                                <strong>${escapeHtml(record.timestamp)}</strong><br>
+                                <span style="font-size: 11px; color: #4a5568;">${escapeHtml(record.summary)}</span>
+                                ${convCount > 0 ? `<span style="margin-left: 8px; background: #8e44ad; color: white; padding: 2px 6px; border-radius: 12px; font-size: 10px;">💬 ${convCount}</span>` : ''}
+                            </div>
+                            <div class="history-actions">
+                                <button class="load-history-btn">加载</button>
+                                <button class="toggle-conv-btn">${convCount > 0 ? '展开问答' : '无问答'}</button>
+                            </div>
+                        </div>
+                        <div class="history-conversations" style="display: none;">
+                            ${renderConversations(record.conversations)}
+                        </div>
+                    </div>
+                `;
+            }
+            historyListDiv.innerHTML = html;
+            
+            document.querySelectorAll('.load-history-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const parent = btn.closest('.history-item');
+                    const id = parseInt(parent.getAttribute('data-id'));
+                    loadHistoryById(id);
+                });
+            });
+            document.querySelectorAll('.toggle-conv-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const parent = btn.closest('.history-item');
+                    const convDiv = parent.querySelector('.history-conversations');
+                    if (convDiv.style.display === 'none') {
+                        convDiv.style.display = 'block';
+                        btn.textContent = '收起问答';
+                    } else {
+                        convDiv.style.display = 'none';
+                        btn.textContent = `展开问答 (${parent.querySelectorAll('.conv-item').length})`;
+                    }
+                });
+            });
+        }
+
+        function renderConversations(convs) {
+            if (!convs.length) return '<div style="color: #888; padding: 4px;">暂无追问记录</div>';
+            let html = '';
+            for (const conv of convs) {
+                html += `
+                    <div class="conv-item">
+                        <div class="conv-question">❓ ${escapeHtml(conv.question)}</div>
+                        <div class="conv-answer">📝 ${escapeHtml(conv.answer).replace(/\n/g, '<br>')}</div>
+                        ${conv.newYaml ? `<div class="conv-yaml">✨ 修改后YAML预览：<br>${escapeHtml(conv.newYaml.substring(0, 200))}${conv.newYaml.length > 200 ? '...' : ''}</div>` : ''}
+                        <div style="font-size: 10px; color: #888;">${conv.timestamp}</div>
+                    </div>
+                `;
+            }
+            return html;
+        }
+
+        function loadHistoryById(id) {
+            const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            const record = history.find(r => r.id === id);
+            if (record) {
+                currentYamlString = record.yaml;
+                yamlOutputDiv.textContent = currentYamlString;
+                exportBtn.disabled = false;
+                currentHistoryId = id;
+                showError('', true);
+                // 临时提示
+                const msg = document.createElement('div');
+                msg.textContent = '✅ 已加载历史剧本及关联问答';
+                msg.style.color = '#27ae60';
+                msg.style.fontSize = '12px';
+                document.querySelector(`.history-item[data-id="${id}"] .history-header`).appendChild(msg);
+                setTimeout(() => msg.remove(), 2000);
+            }
+        }
+
+        function clearHistory() {
+            if (confirm('确定要清空所有历史记录吗？')) {
+                localStorage.removeItem(STORAGE_KEY);
+                currentHistoryId = null;
+                renderHistory();
+            }
+        }
+        clearHistoryBtn.addEventListener('click', clearHistory);
 
         // ========== 辅助函数 ==========
         function showError(msg, clear = false) {
@@ -266,14 +460,21 @@
                 errorMsgDiv.style.display = 'block';
             }
         }
-
-        // 读取单个文件（前端直读 .txt/.md，.docx 走后端解析接口）
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
         function readFileContent(file) {
             return new Promise((resolve, reject) => {
                 const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
                 if (ext === '.txt' || ext === '.md') {
                     const reader = new FileReader();
-                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onload = e => resolve(e.target.result);
                     reader.onerror = () => reject(new Error('文件读取失败'));
                     reader.readAsText(file, 'UTF-8');
                 } else if (ext === '.docx') {
@@ -285,23 +486,16 @@
                             if (data.text) resolve(data.text);
                             else reject(new Error(data.error || '解析docx失败'));
                         })
-                        .catch(err => reject(err));
-                } else {
-                    reject(new Error('不支持的文件类型'));
-                }
+                        .catch(reject);
+                } else reject(new Error('不支持的文件类型'));
             });
         }
 
-        // 加载文件（多文件按序拼接，支持追加/替换）
         loadFileBtn.addEventListener('click', async () => {
             const files = Array.from(fileInput.files);
-            if (files.length === 0) {
-                showError('请先选择文件');
-                return;
-            }
+            if (!files.length) { showError('请先选择文件'); return; }
             let allText = '';
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
+            for (const file of files) {
                 try {
                     let content = await readFileContent(file);
                     if (content && !content.endsWith('\n')) content += '\n';
@@ -312,89 +506,66 @@
                 }
             }
             if (allText.endsWith('\n')) allText = allText.slice(0, -1);
-            
             if (appendModeCheck.checked) {
-                let current = inputText.value;
-                if (current && !current.endsWith('\n')) current += '\n';
-                inputText.value = current + allText;
+                let cur = inputText.value;
+                if (cur && !cur.endsWith('\n')) cur += '\n';
+                inputText.value = cur + allText;
             } else {
                 inputText.value = allText;
             }
             showError('', true);
         });
+        clearTextBtn.addEventListener('click', () => { inputText.value = ''; showError('', true); });
 
-        // 清空文本框
-        clearTextBtn.addEventListener('click', () => {
-            inputText.value = '';
-            showError('', true);
-        });
-
-        // ========== 转换逻辑（含章节弹窗 & 强制转换）==========
+        // 转换逻辑
         convertBtn.addEventListener('click', async () => {
             const novel = inputText.value.trim();
-            if (!novel) {
-                showError('请输入小说内容或通过文件导入');
-                return;
-            }
-            
+            if (!novel) { showError('请输入小说内容'); return; }
             const chapterMatches = novel.match(/第[一二三四五六七八九十0-9]+章/g);
             const uniqueChapters = chapterMatches ? new Set(chapterMatches).size : 0;
             
             async function sendConversion(force = false) {
-                loadingMsg.textContent = '转换中（约15秒）...';
+                loadingMsg.textContent = '转换中...';
                 convertBtn.disabled = true;
                 showError('', true);
-                yamlOutputDiv.textContent = '⏳ 正在调用 AI 模型，请稍候...';
+                yamlOutputDiv.textContent = '⏳ 正在调用模型...';
                 currentYamlString = '';
                 exportBtn.disabled = true;
-                // 清空追问区域
                 answerBox.style.display = 'none';
                 answerBox.innerHTML = '';
                 pendingNewYaml = null;
-                
                 const formData = new FormData();
                 formData.append('novel_text', novel);
                 if (force) formData.append('force_convert', 'true');
-                
                 try {
-                    const response = await fetch('/convert', { method: 'POST', body: formData });
-                    const data = await response.json();
-                    if (response.ok && data.yaml) {
+                    const res = await fetch('/convert', { method: 'POST', body: formData });
+                    const data = await res.json();
+                    if (res.ok && data.yaml) {
                         currentYamlString = data.yaml;
                         yamlOutputDiv.textContent = currentYamlString;
                         exportBtn.disabled = false;
-                        showError('', true);
-                    } else {
-                        if (data.error_type === 'insufficient_chapters') {
-                            const userConfirmed = confirm(`⚠️ ${data.error}\n\n是否仍要继续转换？（转换效果可能不佳）`);
-                            if (userConfirmed) await sendConversion(true);
-                            else {
-                                yamlOutputDiv.textContent = '❌ 已取消转换';
-                                showError(data.error);
-                            }
-                        } else {
-                            throw new Error(data.error || '转换失败');
-                        }
-                    }
+                        saveConversionHistory(novel.substring(0, 80), currentYamlString);
+                    } else if (data.error_type === 'insufficient_chapters') {
+                        const confirm = window.confirm(`⚠️ ${data.error}\n\n是否仍要继续转换？`);
+                        if (confirm) await sendConversion(true);
+                        else { yamlOutputDiv.textContent = '❌ 已取消'; showError(data.error); }
+                    } else throw new Error(data.error || '转换失败');
                 } catch (err) {
                     yamlOutputDiv.textContent = `❌ 错误：${err.message}`;
                     showError(err.message);
-                    exportBtn.disabled = true;
                 } finally {
                     loadingMsg.textContent = '';
                     convertBtn.disabled = false;
                 }
             }
-            
             if (uniqueChapters >= 3) await sendConversion(false);
             else {
-                const userConfirm = confirm(`检测到 ${uniqueChapters} 个不同章节，建议至少3章以获得更好效果。\n\n是否仍要继续转换？`);
-                if (userConfirm) await sendConversion(true);
-                else showError('已取消转换，请添加更多章节（至少3章）');
+                const confirm = window.confirm(`检测到 ${uniqueChapters} 个不同章节，建议至少3章。\n是否仍要继续？`);
+                if (confirm) await sendConversion(true);
+                else showError('已取消，请增加章节');
             }
         });
 
-        // ========== 导出 & 复制 ==========
         exportBtn.addEventListener('click', () => {
             if (!currentYamlString) return;
             const blob = new Blob([currentYamlString], {type: 'text/yaml'});
@@ -407,98 +578,64 @@
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         });
-        
         copyBtn.addEventListener('click', async () => {
-            if (!currentYamlString) {
-                showError('没有可复制的 YAML 内容');
-                return;
-            }
+            if (!currentYamlString) { showError('无YAML可复制'); return; }
             try {
                 await navigator.clipboard.writeText(currentYamlString);
-                const originalText = copyBtn.textContent;
+                const original = copyBtn.textContent;
                 copyBtn.textContent = '✅ 已复制！';
-                setTimeout(() => { copyBtn.textContent = originalText; }, 1500);
-            } catch (err) {
-                showError('复制失败，手动选择即可');
-            }
+                setTimeout(() => copyBtn.textContent = original, 1500);
+            } catch { showError('复制失败'); }
         });
 
-        // ========== 可追问打磨 ==========
         askBtn.addEventListener('click', async () => {
             const question = askInput.value.trim();
-            if (!question) {
-                alert('请输入问题或修改要求');
-                return;
-            }
-            if (!currentYamlString) {
-                alert('请先转换小说生成 YAML 剧本');
-                return;
-            }
-            
+            if (!question) return alert('请输入问题');
+            if (!currentYamlString) return alert('请先转换小说');
+            if (!currentHistoryId) return alert('请重新转换或加载历史');
             askBtn.disabled = true;
             answerBox.style.display = 'block';
-            answerBox.innerHTML = '<div style="color: #f39c12;">⏳ 正在思考中，请稍候（约10-20秒）...</div>';
-            pendingNewYaml = null;
-            
+            answerBox.innerHTML = '<div style="color: #f39c12;">⏳ 思考中...</div>';
             try {
-                const response = await fetch('/ask', {
+                const res = await fetch('/ask', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        question: question,
-                        current_yaml: currentYamlString
-                    })
+                    body: JSON.stringify({ question, current_yaml: currentYamlString })
                 });
-                const data = await response.json();
-                if (response.ok) {
-                    let html = '';
-                    if (data.answer) {
-                        html += `<div style="margin-bottom: 10px;"><strong>📝 回答：</strong><br>${escapeHtml(data.answer).replace(/\n/g, '<br>')}</div>`;
-                    }
+                const data = await res.json();
+                if (res.ok) {
+                    let html = `<div><strong>📝 回答：</strong><br>${escapeHtml(data.answer).replace(/\n/g, '<br>')}</div>`;
+                    let hasYaml = false;
                     if (data.has_yaml && data.new_yaml) {
                         pendingNewYaml = data.new_yaml;
-                        html += `<div style="margin-top: 8px;"><button id="applyYamlBtn" class="apply-btn">✨ 应用修改后的 YAML 剧本</button></div>`;
+                        html += `<div style="margin-top:8px;"><button id="applyYamlBtn" class="apply-btn">✨ 应用修改后的YAML</button></div>`;
+                        hasYaml = true;
                     }
                     answerBox.innerHTML = html;
-                    if (data.has_yaml && data.new_yaml) {
-                        const applyBtn = document.getElementById('applyYamlBtn');
-                        if (applyBtn) {
-                            applyBtn.addEventListener('click', () => {
-                                if (pendingNewYaml) {
-                                    currentYamlString = pendingNewYaml;
-                                    yamlOutputDiv.textContent = currentYamlString;
-                                    exportBtn.disabled = false;
-                                    pendingNewYaml = null;
-                                    // 在答案区追加成功提示
-                                    const successSpan = document.createElement('div');
-                                    successSpan.style.color = '#27ae60';
-                                    successSpan.innerText = '✅ 已应用修改后的 YAML 剧本。';
-                                    answerBox.appendChild(successSpan);
-                                    setTimeout(() => successSpan.remove(), 3000);
-                                }
-                            });
-                        }
+                    addConversationToCurrent(question, data.answer || '', data.has_yaml ? data.new_yaml : null);
+                    if (hasYaml) {
+                        document.getElementById('applyYamlBtn')?.addEventListener('click', () => {
+                            if (pendingNewYaml) {
+                                currentYamlString = pendingNewYaml;
+                                yamlOutputDiv.textContent = currentYamlString;
+                                exportBtn.disabled = false;
+                                updateHistoryYaml(currentHistoryId, currentYamlString);
+                                pendingNewYaml = null;
+                                const span = document.createElement('div');
+                                span.style.color = '#27ae60';
+                                span.innerText = '✅ 已应用并更新历史';
+                                answerBox.appendChild(span);
+                                setTimeout(() => span.remove(), 2000);
+                            }
+                        });
                     }
-                } else {
-                    answerBox.innerHTML = `<div class="error">❌ ${escapeHtml(data.error || '未知错误')}</div>`;
-                }
+                } else answerBox.innerHTML = `<div class="error">❌ ${escapeHtml(data.error)}</div>`;
             } catch (err) {
-                answerBox.innerHTML = `<div class="error">请求失败: ${escapeHtml(err.message)}</div>`;
-            } finally {
-                askBtn.disabled = false;
-            }
+                answerBox.innerHTML = `<div class="error">请求失败: ${err.message}</div>`;
+            } finally { askBtn.disabled = false; }
         });
-        
-        // 简单的转义函数
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/[&<>]/g, function(m) {
-                if (m === '&') return '&amp;';
-                if (m === '<') return '&lt;';
-                if (m === '>') return '&gt;';
-                return m;
-            });
-        }
+
+        renderHistory();
     </script>
 </body>
 </html>
