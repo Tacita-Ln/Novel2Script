@@ -33,52 +33,59 @@ def check_chapters(text: str, min_chapters: int = 3) -> dict:
 
 
 def build_prompt(novel_text: str) -> str:
-    """构建发送给智谱模型的 prompt - 强化格式约束并包含小说内容"""
+    """构建发送给智谱模型的 prompt - 标准剧本格式"""
     schema_definition = """
-## 必须遵守的 YAML Schema（字段名和类型完全一致，不要使用任何变体）：
+            你是一个剧本转换工具。将小说转为严格符合以下 YAML Schema 的剧本。
 
-```yaml
-title: string          # 剧本标题（根据小说内容提取）
-author: string         # 原作者，如果未知写"未知"
-logline: string        # 一句话故事梗概
-characters:            # 必须是列表，不是字典
-  - name: string       # 角色名
-    age: int           # 年龄（可选，没有则省略此字段）
-    personality: string  # 性格描述
-    role_type: string  # 必须是 "主角"、"配角" 或 "反派"
-scenes:                # 必须是列表，按顺序
-  - scene_id: int      # 从1开始递增
-    location: string   # 具体地点
-    time: string       # 如："日"、"夜"、"晨"、"暮"、"室内"、"室外"
-    action: string     # 动作或环境描述（可选，没有则写空字符串）
-    dialogues:         # 必须是列表
-      - character: string  # 角色名（必须在 characters 中存在）
-        line: string       # 台词内容
-        emotion: string    # 情绪（可选，没有则写"平静"）
-```
+            ## Schema
+            ```yaml
+            title: string
+            author: string
+            logline: string
+            characters:
+            - name: string
+                age: int (可选)
+                personality: string
+                role_type: "主角"/"配角"/"反派"
+            scenes:
+            - scene_id: int
+                location: string
+                time: string
+                action: string (可选)
+                dialogues:
+                - character: string
+                    line: string        # 原话内容
+            ```
 
-## 要求：
-1. 只输出 YAML 代码块（```yaml ... ```），不要输出任何解释文字。
-2. 严格遵循上面的字段名和结构（不要用 `type` 代替 `role_type`，不要用 `text` 代替 `line`）。
-3. 根据下面提供的小说内容合理提取信息。
-"""
-    return f"{schema_definition}\n\n## 小说内容：\n{novel_text}\n\n请输出转换后的 YAML 剧本："
+            ## 规则
+            对话：提取所有引号内的句子。独立成条，不合并。说话人据上下文推断。
+            场景：地点/时间变化时新场景，scene_id 从1递增。
+
+            小说内容
+            {novel_text}
+
+            只输出 yaml ... 代码块。
+            """
+    return f"{schema_definition}\n\n## 小说内容：\n{novel_text}\n\n请输出 YAML 剧本（只输出代码块）："
 
 
-def parse_novel_to_script(novel_text: str) -> dict:
+def parse_novel_to_script(novel_text: str, skip_chapter_check: bool = False) -> dict:
     """
-    主函数：调用智谱 API 将小说文本转为剧本字典（已解析为 Python 对象）
-    返回: {'success': bool, 'data': dict or None, 'error': str}
+    主函数：调用智谱 API 将小说文本转为剧本字典
+    参数:
+        novel_text: 小说文本
+        skip_chapter_check: 是否跳过章节数量检查（用于强制转换）
     """
     if not client:
         return {'success': False, 'data': None, 'error': '智谱 API 客户端未初始化，请检查 ZHIPU_API_KEY 环境变量'}
 
-    # 先检查章节数
-    chapter_check = check_chapters(novel_text)
-    if not chapter_check['valid']:
-        return {'success': False, 'data': None, 'error': chapter_check['message']}
+    # 只有在不跳过时才检查章节数
+    if not skip_chapter_check:
+        chapter_check = check_chapters(novel_text)
+        if not chapter_check['valid']:
+            return {'success': False, 'data': None, 'error': chapter_check['message']}
 
-    # 构建 prompt（现在包含了小说内容）
+    # 构建 prompt
     prompt = build_prompt(novel_text)
 
     try:
