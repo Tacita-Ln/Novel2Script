@@ -31,7 +31,7 @@
             display: flex;
             flex: 1;
             gap: 20px;
-            min-height: 0;  /* flex限制溢出 */
+            min-height: 0;
         }
         .left-panel, .right-panel {
             background: white;
@@ -42,12 +42,8 @@
             padding: 20px;
             overflow: auto;
         }
-        .left-panel {
-            flex: 1;
-        }
-        .right-panel {
-            flex: 1;
-        }
+        .left-panel { flex: 1; }
+        .right-panel { flex: 1; }
         .panel-title {
             font-weight: 600;
             margin-bottom: 12px;
@@ -69,6 +65,22 @@
         }
         .file-upload {
             margin: 10px 0;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .file-upload input[type="file"] {
+            flex: 1;
+        }
+        .mode-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f8fafc;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 13px;
         }
         button {
             background: #3498db;
@@ -82,10 +94,10 @@
             margin-right: 10px;
         }
         button:hover { background: #2980b9; }
-        .export-btn {
-            background: #2ecc71;
-        }
+        .export-btn { background: #2ecc71; }
         .export-btn:hover { background: #27ae60; }
+        .clear-btn { background: #e67e22; }
+        .clear-btn:hover { background: #d35400; }
         .error {
             color: #e74c3c;
             background: #fef3f2;
@@ -123,10 +135,10 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
         }
-        hr {
-            margin: 15px 0;
-        }
+        hr { margin: 15px 0; }
     </style>
 </head>
 <body>
@@ -138,10 +150,16 @@
         <div class="left-panel">
             <div class="panel-title">📂 1. 导入小说</div>
             <textarea id="inputText" placeholder="请在此粘贴至少包含3章的小说内容（支持第X章格式）..."></textarea>
+            
             <div class="file-upload">
-                <input type="file" id="fileInput" accept=".txt">
+                <input type="file" id="fileInput" multiple accept=".txt,.md,.docx">
                 <button id="loadFileBtn">📄 加载文件内容</button>
+                <label class="mode-check">
+                    <input type="checkbox" id="appendMode"> 📎 追加到当前内容后
+                </label>
+                <button id="clearTextBtn" class="clear-btn">🗑️ 清空文本框</button>
             </div>
+
             <div class="action-bar">
                 <div>
                     <button id="convertBtn">✨ 转换为剧本 YAML</button>
@@ -153,7 +171,8 @@
                 <strong>💡 要求</strong><br>
                 • 至少包含3个章节（如“第一章、第二章、第三章”）<br>
                 • 输出格式符合预定义剧本Schema<br>
-                • 转换耗时约10-20秒，请耐心等待
+                • 转换耗时约10-20秒，请耐心等待<br>
+                • 支持 .txt, .md, .docx 格式，可多选文件（按顺序加载）
             </div>
         </div>
 
@@ -172,6 +191,8 @@
         const inputText = document.getElementById('inputText');
         const fileInput = document.getElementById('fileInput');
         const loadFileBtn = document.getElementById('loadFileBtn');
+        const clearTextBtn = document.getElementById('clearTextBtn');
+        const appendModeCheck = document.getElementById('appendMode');
         const convertBtn = document.getElementById('convertBtn');
         const yamlOutputDiv = document.getElementById('yamlOutput');
         const exportBtn = document.getElementById('exportBtn');
@@ -179,25 +200,78 @@
         const loadingMsg = document.getElementById('loadingMsg');
         const errorMsgDiv = document.getElementById('errorMsg');
         
-        let currentYamlString = '';   // 存储最新生成的 YAML 字符串
-        
-        // 加载文件内容到文本框
-        loadFileBtn.addEventListener('click', () => {
-            const file = fileInput.files[0];
-            if (!file) {
-                showError('请先选择 .txt 文件');
+        let currentYamlString = '';
+
+        // 清空文本框
+        clearTextBtn.addEventListener('click', () => {
+            inputText.value = '';
+            showError('', true);
+        });
+
+        // 辅助函数：读取单个文件（支持 .txt/.md 直接读，.docx 走后端）
+        function readFileContent(file) {
+            return new Promise((resolve, reject) => {
+                const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+                if (ext === '.txt' || ext === '.md') {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = () => reject(new Error('文件读取失败'));
+                    reader.readAsText(file, 'UTF-8');
+                } else if (ext === '.docx') {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    fetch('/parse_docx', { method: 'POST', body: formData })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.text) resolve(data.text);
+                            else reject(new Error(data.error || '解析docx失败'));
+                        })
+                        .catch(err => reject(err));
+                } else {
+                    reject(new Error('不支持的文件类型'));
+                }
+            });
+        }
+
+        // 加载文件内容：无论替换还是追加，都将所有选中的文件内容按顺序拼接
+        loadFileBtn.addEventListener('click', async () => {
+            const files = Array.from(fileInput.files);
+            if (files.length === 0) {
+                showError('请先选择文件');
                 return;
             }
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                inputText.value = e.target.result;
-                showError('', true);
-            };
-            reader.onerror = () => showError('文件读取失败');
-            reader.readAsText(file, 'UTF-8');
+
+            // 依次读取所有文件内容
+            let allText = '';
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                try {
+                    let content = await readFileContent(file);
+                    // 每个文件内容后加一个换行（避免粘连）
+                    if (content && !content.endsWith('\n')) content += '\n';
+                    allText += content;
+                } catch (err) {
+                    showError(`读取文件 "${file.name}" 失败: ${err.message}`);
+                    return;
+                }
+            }
+
+            // 去掉最后一个多余的换行（如果有）
+            if (allText.endsWith('\n')) allText = allText.slice(0, -1);
+
+            if (appendModeCheck.checked) {
+                // 追加模式：在原内容后添加（如果原内容非空且末尾没有换行，先加换行）
+                let current = inputText.value;
+                if (current && !current.endsWith('\n')) current += '\n';
+                inputText.value = current + allText;
+            } else {
+                // 替换模式：清空后填入所有文件拼接的内容
+                inputText.value = allText;
+            }
+            showError('', true);
         });
         
-        // 转换
+        // 转换（原有逻辑，无变化）
         convertBtn.addEventListener('click', async () => {
             const novel = inputText.value.trim();
             if (!novel) {
@@ -205,11 +279,9 @@
                 return;
             }
             
-            // 简单章节数统计（用于提醒）
             const chapterMatches = novel.match(/第[一二三四五六七八九十0-9]+章/g);
             const uniqueChapters = chapterMatches ? new Set(chapterMatches).size : 0;
             
-            // 辅助函数：实际发送转换请求
             async function sendConversion(force = false) {
                 loadingMsg.textContent = '转换中（约15秒）...';
                 convertBtn.disabled = true;
@@ -220,15 +292,10 @@
                 
                 const formData = new FormData();
                 formData.append('novel_text', novel);
-                if (force) {
-                    formData.append('force_convert', 'true');
-                }
+                if (force) formData.append('force_convert', 'true');
                 
                 try {
-                    const response = await fetch('/convert', {
-                        method: 'POST',
-                        body: formData
-                    });
+                    const response = await fetch('/convert', { method: 'POST', body: formData });
                     const data = await response.json();
                     if (response.ok && data.yaml) {
                         currentYamlString = data.yaml;
@@ -236,14 +303,10 @@
                         exportBtn.disabled = false;
                         showError('', true);
                     } else {
-                        // 处理章节不足的特殊错误
                         if (data.error_type === 'insufficient_chapters') {
-                            const userConfirmed = confirm(
-                                `⚠️ ${data.error}\n\n是否仍要继续转换？（转换效果可能不佳）`
-                            );
-                            if (userConfirmed) {
-                                await sendConversion(true);  // 强制转换
-                            } else {
+                            const userConfirmed = confirm(`⚠️ ${data.error}\n\n是否仍要继续转换？（转换效果可能不佳）`);
+                            if (userConfirmed) await sendConversion(true);
+                            else {
                                 yamlOutputDiv.textContent = '❌ 已取消转换';
                                 showError(data.error);
                             }
@@ -261,22 +324,14 @@
                 }
             }
             
-            // 先检查章节数，若不足则弹窗询问，否则直接转换
-            if (uniqueChapters >= 3) {
-                await sendConversion(false);
-            } else {
-                const userConfirm = confirm(
-                    `检测到 ${uniqueChapters} 个不同章节，建议至少3章以获得更好效果。\n\n是否仍要继续转换？`
-                );
-                if (userConfirm) {
-                    await sendConversion(true);
-                } else {
-                    showError('已取消转换，请添加更多章节（至少3章）');
-                }
+            if (uniqueChapters >= 3) await sendConversion(false);
+            else {
+                const userConfirm = confirm(`检测到 ${uniqueChapters} 个不同章节，建议至少3章以获得更好效果。\n\n是否仍要继续转换？`);
+                if (userConfirm) await sendConversion(true);
+                else showError('已取消转换，请添加更多章节（至少3章）');
             }
         });
         
-        // 导出 YAML 文件
         exportBtn.addEventListener('click', () => {
             if (!currentYamlString) return;
             const blob = new Blob([currentYamlString], {type: 'text/yaml'});
@@ -290,7 +345,6 @@
             URL.revokeObjectURL(url);
         });
         
-        // 复制到剪贴板
         copyBtn.addEventListener('click', async () => {
             if (!currentYamlString) {
                 showError('没有可复制的 YAML 内容');
