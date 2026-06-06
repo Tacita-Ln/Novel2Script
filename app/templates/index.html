@@ -204,45 +204,75 @@
                 showError('请输入小说内容或通过文件导入');
                 return;
             }
-            // 简单章节数提醒（至少3章）
+            
+            // 简单章节数统计（用于提醒）
             const chapterMatches = novel.match(/第[一二三四五六七八九十0-9]+章/g);
             const uniqueChapters = chapterMatches ? new Set(chapterMatches).size : 0;
-            if (uniqueChapters < 3) {
-                showError(`⚠️ 检测到 ${uniqueChapters} 个不同章节，至少需要3章，请补充后重试。`);
-                return;
+            
+            // 辅助函数：实际发送转换请求
+            async function sendConversion(force = false) {
+                loadingMsg.textContent = '转换中（约15秒）...';
+                convertBtn.disabled = true;
+                showError('', true);
+                yamlOutputDiv.textContent = '⏳ 正在调用 AI 模型，请稍候...';
+                currentYamlString = '';
+                exportBtn.disabled = true;
+                
+                const formData = new FormData();
+                formData.append('novel_text', novel);
+                if (force) {
+                    formData.append('force_convert', 'true');
+                }
+                
+                try {
+                    const response = await fetch('/convert', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if (response.ok && data.yaml) {
+                        currentYamlString = data.yaml;
+                        yamlOutputDiv.textContent = currentYamlString;
+                        exportBtn.disabled = false;
+                        showError('', true);
+                    } else {
+                        // 处理章节不足的特殊错误
+                        if (data.error_type === 'insufficient_chapters') {
+                            const userConfirmed = confirm(
+                                `⚠️ ${data.error}\n\n是否仍要继续转换？（转换效果可能不佳）`
+                            );
+                            if (userConfirmed) {
+                                await sendConversion(true);  // 强制转换
+                            } else {
+                                yamlOutputDiv.textContent = '❌ 已取消转换';
+                                showError(data.error);
+                            }
+                        } else {
+                            throw new Error(data.error || '转换失败');
+                        }
+                    }
+                } catch (err) {
+                    yamlOutputDiv.textContent = `❌ 错误：${err.message}`;
+                    showError(err.message);
+                    exportBtn.disabled = true;
+                } finally {
+                    loadingMsg.textContent = '';
+                    convertBtn.disabled = false;
+                }
             }
             
-            loadingMsg.textContent = '转换中（约15秒）...';
-            convertBtn.disabled = true;
-            showError('', true);
-            yamlOutputDiv.textContent = '⏳ 正在调用 AI 模型，请稍候...';
-            currentYamlString = '';
-            exportBtn.disabled = true;
-            
-            const formData = new FormData();
-            formData.append('novel_text', novel);
-            
-            try {
-                const response = await fetch('/convert', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                if (response.ok && data.yaml) {
-                    currentYamlString = data.yaml;
-                    yamlOutputDiv.textContent = currentYamlString;
-                    exportBtn.disabled = false;
-                    showError('', true);
+            // 先检查章节数，若不足则弹窗询问，否则直接转换
+            if (uniqueChapters >= 3) {
+                await sendConversion(false);
+            } else {
+                const userConfirm = confirm(
+                    `检测到 ${uniqueChapters} 个不同章节，建议至少3章以获得更好效果。\n\n是否仍要继续转换？`
+                );
+                if (userConfirm) {
+                    await sendConversion(true);
                 } else {
-                    throw new Error(data.error || '转换失败');
+                    showError('已取消转换，请添加更多章节（至少3章）');
                 }
-            } catch (err) {
-                yamlOutputDiv.textContent = `❌ 错误：${err.message}`;
-                showError(err.message);
-                exportBtn.disabled = true;
-            } finally {
-                loadingMsg.textContent = '';
-                convertBtn.disabled = false;
             }
         });
         
