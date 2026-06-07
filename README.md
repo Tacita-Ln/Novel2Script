@@ -133,7 +133,7 @@ scenes:
 
 ## 🎥 演示视频
 
-[点击观看完整演示视频]（https://www.bilibili.com/video/BV1ZqEt6xEVs/）  
+[点击观看完整演示视频] https://www.bilibili.com/video/BV1ZqEt6xEVs/  
 > 视频包含：小说输入 → 转换 → YAML 编辑 → 追问修改 → 自定义导出 → 历史加载全流程。
 
 ---
