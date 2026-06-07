@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Novel2Script - 三栏布局：导入 | 在线编辑剧本 | 历史追问</title>
+    <title>Novel2Script</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -258,7 +258,7 @@
                 • 输出无emotion字段的YAML<br>
                 • 支持 .txt, .md, .docx 多文件<br>
                 • 中栏YAML可直接编辑，修改后导出/追问基于编辑后内容<br>
-                • 右侧历史含问答，支持加载旧版
+                • 右侧历史含问答，支持加载历史
             </div>
         </div>
 
@@ -276,7 +276,7 @@
             </div>
 
             <div class="ask-container">
-                <div class="panel-title">💬 3. 可追问打磨</div>
+                <div class="panel-title">💬 3. 追问打磨</div>
                 <div class="ask-input-group">
                     <input type="text" id="askInput" placeholder="例如：请把第二场的地点改为咖啡馆，或者：检查主角情绪是否连贯...">
                     <button id="askBtn" class="ask-btn">🤔 提问 / 修改</button>
@@ -285,10 +285,10 @@
             </div>
         </div>
 
-        <!-- 右栏：历史记录（含问答） -->
+        <!-- 右栏：历史记录 -->
         <div class="col col-right">
             <div class="panel-title">
-                <span>🕒 历史记录（含问答）</span>
+                <span>🕒 历史记录</span>
                 <button id="clearHistoryBtn" class="clear-history-btn">清空历史</button>
             </div>
             <div id="historyList" class="history-list">
