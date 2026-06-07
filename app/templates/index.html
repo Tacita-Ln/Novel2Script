@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Novel2Script - 三栏布局：导入 | 剧本 | 历史追问</title>
+    <title>Novel2Script - 三栏布局：导入 | 在线编辑剧本 | 历史追问</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -57,7 +57,7 @@
             justify-content: space-between;
             align-items: center;
         }
-        textarea {
+        textarea, .editable-yaml {
             width: 100%;
             flex: 1;
             font-family: 'Courier New', monospace;
@@ -67,6 +67,10 @@
             resize: vertical;
             margin-bottom: 15px;
             font-size: 14px;
+            background: #1e293b;
+            color: #e2e8f0;
+            white-space: pre-wrap;
+            overflow: auto;
         }
         .file-upload {
             margin: 10px 0;
@@ -126,18 +130,6 @@
             display: inline-block;
             margin-left: 10px;
             color: #f39c12;
-        }
-        .yaml-output {
-            background: #1e293b;
-            color: #e2e8f0;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            padding: 12px;
-            border-radius: 8px;
-            overflow: auto;
-            white-space: pre-wrap;
-            flex: 1;
-            margin-bottom: 15px;
         }
         .action-bar {
             display: flex;
@@ -221,7 +213,7 @@
 </head>
 <body>
     <h1>📖 Novel2Script · AI 小说转剧本工具</h1>
-    <div class="sub">基于智谱 GLM-4.5-Air，将小说（≥3章）转换为结构化 YAML 剧本 | 支持追问打磨，历史记录含问答</div>
+    <div class="sub">基于智谱 GLM-4.5-Air，将小说（≥3章）转换为结构化 YAML 剧本 | 支持在线编辑剧本 | 可追问打磨，历史含问答</div>
 
     <div class="three-columns">
         <!-- 左栏：导入区 -->
@@ -248,14 +240,15 @@
                 • 至少3个章节<br>
                 • 输出无emotion字段的YAML<br>
                 • 支持 .txt, .md, .docx 多文件<br>
-                • 右侧可追问打磨，历史记录自动保存问答
+                • 中栏YAML可直接编辑，修改后导出/追问基于编辑后内容<br>
+                • 右侧历史含问答，支持加载旧版
             </div>
         </div>
 
-        <!-- 中栏：输出 + 追问打磨 -->
+        <!-- 中栏：可编辑剧本 + 追问打磨 -->
         <div class="col col-mid">
-            <div class="panel-title">🎬 2. 剧本输出 (YAML)</div>
-            <div id="yamlOutput" class="yaml-output">等待转换...</div>
+            <div class="panel-title">🎬 2. 剧本输出 (YAML) - 可直接编辑</div>
+            <textarea id="yamlOutput" class="editable-yaml" placeholder="等待转换..."></textarea>
             <div class="action-bar">
                 <button id="exportBtn" class="export-btn" disabled>💾 导出 YAML</button>
                 <button id="copyBtn">📋 复制到剪贴板</button>
@@ -291,7 +284,7 @@
         const clearTextBtn = document.getElementById('clearTextBtn');
         const appendModeCheck = document.getElementById('appendMode');
         const convertBtn = document.getElementById('convertBtn');
-        const yamlOutputDiv = document.getElementById('yamlOutput');
+        const yamlOutputTextarea = document.getElementById('yamlOutput');
         const exportBtn = document.getElementById('exportBtn');
         const copyBtn = document.getElementById('copyBtn');
         const loadingMsg = document.getElementById('loadingMsg');
@@ -302,9 +295,22 @@
         const historyListDiv = document.getElementById('historyList');
         const clearHistoryBtn = document.getElementById('clearHistoryBtn');
         
-        let currentYamlString = '';
+        let currentYamlString = '';      // 始终与 textarea 同步
         let currentHistoryId = null;
         let pendingNewYaml = null;
+
+        // 同步 textarea 内容到 currentYamlString
+        function syncYamlFromEditor() {
+            currentYamlString = yamlOutputTextarea.value;
+        }
+        yamlOutputTextarea.addEventListener('input', syncYamlFromEditor);
+
+        // 设置 YAML 内容（同时更新 textarea 和变量）
+        function setYamlContent(newYaml) {
+            currentYamlString = newYaml;
+            yamlOutputTextarea.value = newYaml;
+            exportBtn.disabled = false;
+        }
 
         // ========== 历史记录管理（含问答）==========
         const STORAGE_KEY = 'Novel2Script_history_with_qa';
@@ -426,9 +432,7 @@
             const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
             const record = history.find(r => r.id === id);
             if (record) {
-                currentYamlString = record.yaml;
-                yamlOutputDiv.textContent = currentYamlString;
-                exportBtn.disabled = false;
+                setYamlContent(record.yaml);
                 currentHistoryId = id;
                 showError('', true);
                 // 临时提示
@@ -436,7 +440,8 @@
                 msg.textContent = '✅ 已加载历史剧本及关联问答';
                 msg.style.color = '#27ae60';
                 msg.style.fontSize = '12px';
-                document.querySelector(`.history-item[data-id="${id}"] .history-header`).appendChild(msg);
+                const header = document.querySelector(`.history-item[data-id="${id}"] .history-header`);
+                if (header) header.appendChild(msg);
                 setTimeout(() => msg.remove(), 2000);
             }
         }
@@ -528,9 +533,7 @@
                 loadingMsg.textContent = '转换中...';
                 convertBtn.disabled = true;
                 showError('', true);
-                yamlOutputDiv.textContent = '⏳ 正在调用模型...';
-                currentYamlString = '';
-                exportBtn.disabled = true;
+                setYamlContent('⏳ 正在调用模型...');
                 answerBox.style.display = 'none';
                 answerBox.innerHTML = '';
                 pendingNewYaml = null;
@@ -541,17 +544,15 @@
                     const res = await fetch('/convert', { method: 'POST', body: formData });
                     const data = await res.json();
                     if (res.ok && data.yaml) {
-                        currentYamlString = data.yaml;
-                        yamlOutputDiv.textContent = currentYamlString;
-                        exportBtn.disabled = false;
+                        setYamlContent(data.yaml);
                         saveConversionHistory(novel.substring(0, 80), currentYamlString);
                     } else if (data.error_type === 'insufficient_chapters') {
                         const confirm = window.confirm(`⚠️ ${data.error}\n\n是否仍要继续转换？`);
                         if (confirm) await sendConversion(true);
-                        else { yamlOutputDiv.textContent = '❌ 已取消'; showError(data.error); }
+                        else { setYamlContent('❌ 已取消'); showError(data.error); }
                     } else throw new Error(data.error || '转换失败');
                 } catch (err) {
-                    yamlOutputDiv.textContent = `❌ 错误：${err.message}`;
+                    setYamlContent(`❌ 错误：${err.message}`);
                     showError(err.message);
                 } finally {
                     loadingMsg.textContent = '';
@@ -567,7 +568,7 @@
         });
 
         exportBtn.addEventListener('click', () => {
-            if (!currentYamlString) return;
+            if (!currentYamlString || currentYamlString === '等待转换...') return;
             const blob = new Blob([currentYamlString], {type: 'text/yaml'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -579,7 +580,7 @@
             URL.revokeObjectURL(url);
         });
         copyBtn.addEventListener('click', async () => {
-            if (!currentYamlString) { showError('无YAML可复制'); return; }
+            if (!currentYamlString || currentYamlString === '等待转换...') { showError('无YAML可复制'); return; }
             try {
                 await navigator.clipboard.writeText(currentYamlString);
                 const original = copyBtn.textContent;
@@ -591,7 +592,7 @@
         askBtn.addEventListener('click', async () => {
             const question = askInput.value.trim();
             if (!question) return alert('请输入问题');
-            if (!currentYamlString) return alert('请先转换小说');
+            if (!currentYamlString || currentYamlString === '等待转换...') return alert('请先转换小说');
             if (!currentHistoryId) return alert('请重新转换或加载历史');
             askBtn.disabled = true;
             answerBox.style.display = 'block';
@@ -616,9 +617,7 @@
                     if (hasYaml) {
                         document.getElementById('applyYamlBtn')?.addEventListener('click', () => {
                             if (pendingNewYaml) {
-                                currentYamlString = pendingNewYaml;
-                                yamlOutputDiv.textContent = currentYamlString;
-                                exportBtn.disabled = false;
+                                setYamlContent(pendingNewYaml);
                                 updateHistoryYaml(currentHistoryId, currentYamlString);
                                 pendingNewYaml = null;
                                 const span = document.createElement('div');
@@ -636,6 +635,8 @@
         });
 
         renderHistory();
+        // 初始占位
+        setYamlContent('等待转换...');
     </script>
 </body>
 </html>
