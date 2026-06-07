@@ -138,6 +138,21 @@
             flex-wrap: wrap;
             gap: 10px;
         }
+        .filename-input {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #f8fafc;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+        .filename-input input {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 4px 8px;
+            width: 140px;
+            font-size: 13px;
+        }
         hr { margin: 15px 0; }
         .ask-container {
             margin-top: 12px;
@@ -210,10 +225,12 @@
         .conv-answer { margin-top: 4px; color: #2c3e50; }
         .conv-yaml { font-family: monospace; background: #1e293b; color: #e2e8f0; padding: 4px; margin-top: 4px; font-size: 11px; white-space: pre-wrap; }
     </style>
+    <!-- 引入 js-yaml 用于解析 title -->
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 </head>
 <body>
     <h1>📖 Novel2Script · AI 小说转剧本工具</h1>
-    <div class="sub">基于智谱 GLM-4.5-Air，将小说（≥3章）转换为结构化 YAML 剧本 | 支持在线编辑剧本 | 可追问打磨，历史含问答</div>
+    <div class="sub">基于智谱 GLM-4.5-Air，将小说（≥3章）转换为结构化 YAML 剧本 | 支持在线编辑剧本 | 可追问打磨，历史含问答 | 导出可自定义文件名</div>
 
     <div class="three-columns">
         <!-- 左栏：导入区 -->
@@ -250,6 +267,10 @@
             <div class="panel-title">🎬 2. 剧本输出 (YAML) - 可直接编辑</div>
             <textarea id="yamlOutput" class="editable-yaml" placeholder="等待转换..."></textarea>
             <div class="action-bar">
+                <div class="filename-input">
+                    <span>📝 导出文件名：</span>
+                    <input type="text" id="exportFilename" placeholder="不含后缀" value="script">
+                </div>
                 <button id="exportBtn" class="export-btn" disabled>💾 导出 YAML</button>
                 <button id="copyBtn">📋 复制到剪贴板</button>
             </div>
@@ -294,6 +315,7 @@
         const answerBox = document.getElementById('answerBox');
         const historyListDiv = document.getElementById('historyList');
         const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+        const exportFilenameInput = document.getElementById('exportFilename');
         
         let currentYamlString = '';      // 始终与 textarea 同步
         let currentHistoryId = null;
@@ -302,14 +324,45 @@
         // 同步 textarea 内容到 currentYamlString
         function syncYamlFromEditor() {
             currentYamlString = yamlOutputTextarea.value;
+            // 每次编辑后，尝试从YAML提取title并更新默认文件名
+            updateDefaultFilenameFromYaml();
         }
         yamlOutputTextarea.addEventListener('input', syncYamlFromEditor);
+
+        // 从 YAML 中提取 title 作为默认文件名（不覆盖用户已手动修改的输入）
+        let lastAutoFilename = '';
+        function updateDefaultFilenameFromYaml() {
+            if (!currentYamlString) return;
+            // 如果用户已经手动修改了文件名输入框且不是上次自动设置的值，则不再覆盖
+            const currentInputVal = exportFilenameInput.value.trim();
+            if (currentInputVal !== '' && currentInputVal !== lastAutoFilename && currentInputVal !== 'script') {
+                // 用户自己输入了，保留用户输入
+                return;
+            }
+            try {
+                const parsed = jsyaml.load(currentYamlString);
+                if (parsed && parsed.title) {
+                    let title = parsed.title.replace(/[\\/:*?"<>|]/g, '');
+                    if (title) {
+                        exportFilenameInput.value = title;
+                        lastAutoFilename = title;
+                        return;
+                    }
+                }
+            } catch(e) { /* 忽略解析错误 */ }
+            // 没有title或解析失败则使用默认 script
+            if (exportFilenameInput.value === '' || exportFilenameInput.value === lastAutoFilename) {
+                exportFilenameInput.value = 'script';
+                lastAutoFilename = 'script';
+            }
+        }
 
         // 设置 YAML 内容（同时更新 textarea 和变量）
         function setYamlContent(newYaml) {
             currentYamlString = newYaml;
             yamlOutputTextarea.value = newYaml;
             exportBtn.disabled = false;
+            updateDefaultFilenameFromYaml();
         }
 
         // ========== 历史记录管理（含问答）==========
@@ -567,18 +620,25 @@
             }
         });
 
+        // 导出 YAML 文件（支持自定义文件名）
         exportBtn.addEventListener('click', () => {
             if (!currentYamlString || currentYamlString === '等待转换...') return;
+            let filename = exportFilenameInput.value.trim();
+            if (filename === '') filename = 'script';
+            // 去除非法字符
+            filename = filename.replace(/[\\/:*?"<>|]/g, '');
+            if (!filename.endsWith('.yaml')) filename += '.yaml';
             const blob = new Blob([currentYamlString], {type: 'text/yaml'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'script.yaml';
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         });
+        
         copyBtn.addEventListener('click', async () => {
             if (!currentYamlString || currentYamlString === '等待转换...') { showError('无YAML可复制'); return; }
             try {
